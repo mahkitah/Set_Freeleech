@@ -1,15 +1,20 @@
 import os
+import shutil
 from hashlib import sha1
 
 from bcoding import bdecode, bencode
 from gazelle_api import GazelleApi
 
+##############################################
+# edit this:
+
 torrentfolder = "D:\\Test\\Torrents"
+move_on_success_folder = "D:\\Test\\Made Freeleech"
 api_key = "1234567890"
 
 ###############################################
 
-ops = GazelleApi('OPS', api_key)
+ops = GazelleApi('OPS', f'token {api_key}')
 
 def get_infohash_from_dtorrent(torrent):
     torrent = bdecode(torrent)
@@ -27,4 +32,8 @@ if __name__ == "__main__":
                 torbytes = f.read()
             hash = get_infohash_from_dtorrent(torbytes)
             tor_id = get_torid_from_hash(hash)
-            ops.request('GET', 'download', expect_bytes=True, id=tor_id, usetoken=True)
+            r = ops.request('GET', 'download', id=tor_id, usetoken=True)
+
+            if os.path.isdir(move_on_success_folder):
+                if 'application/x-bittorrent' in r.headers['content-type']:
+                    shutil.move(scan.path, move_on_success_folder)
