@@ -3,13 +3,13 @@ import shutil
 from hashlib import sha1
 
 from bcoding import bdecode, bencode
-from gazelle_api import GazelleApi
+from gazelle_api import GazelleApi, RequestFailure
 
 ##############################################
 # edit this:
 
 torrentfolder = "D:\\Test\\Torrents"
-move_on_success_folder = "D:\\Test\\Made Freeleech"
+move_on_success_folder = "D:\\Test\\Made Freeleech"  # Use empty quotes to not move on success
 api_key = "1234567890"
 
 ###############################################
@@ -32,8 +32,12 @@ if __name__ == "__main__":
                 torbytes = f.read()
             hash = get_infohash_from_dtorrent(torbytes)
             tor_id = get_torid_from_hash(hash)
-            r = ops.request('GET', 'download', id=tor_id, usetoken=True)
+            try:
+                r = ops.request('GET', 'download', id=tor_id, usetoken=True)
+            except RequestFailure:
+                continue
 
-            if os.path.isdir(move_on_success_folder):
-                if 'application/x-bittorrent' in r.headers['content-type']:
+            if 'application/x-bittorrent' in r.headers['content-type']:
+                print(f'freeleech: {scan.name}')
+                if os.path.isdir(move_on_success_folder):
                     shutil.move(scan.path, move_on_success_folder)

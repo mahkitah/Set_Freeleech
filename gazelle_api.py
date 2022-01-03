@@ -58,4 +58,11 @@ class GazelleApi:
 
         r.raise_for_status()
 
-        return r
+        try:
+            r_dict = r.json()
+            if r_dict["status"] == "success":
+                return r_dict["response"]
+            elif r_dict["status"] == "failure":
+                raise RequestFailure(r_dict["error"])
+        except JSONDecodeError:
+            return r
