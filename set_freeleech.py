@@ -98,6 +98,8 @@ def main():
                 tokens_spent += nr_tokens
                 if os.path.isdir(move_on_success_folder):
                     shutil.move(scan.path, move_on_success_folder)
+                if tokens_spent == spend_max_tokens:
+                    break
 
     else:
         for scan in scan_torrent_files(torrentfolder):
