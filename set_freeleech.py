@@ -10,7 +10,7 @@ from gazelle_api import GazelleApi, RequestFailure
 # edit this:
 
 torrentfolder = "D:\\Test\\Torrents"
-move_on_success_folder = "D:\\Test\\Made Freeleech"  # Must exits. Use empty quotes to not move on success
+move_on_success_folder = "D:\\Test\\Made Freeleech"  # Must exist. Use empty quotes to not move on success
 api_key = "1234567890"
 use_regex_for_torid = r'.+-(\d+).torrent'  # Use empty quotes to not use regex
 token_size = 512 * 1024 ** 2
@@ -59,25 +59,18 @@ def make_freeleech(tor_id):
     if 'application/x-bittorrent' in r.headers['content-type']:
         return True
 
-def get_size_from_dtorrent(dtor_dict):
-    size = 0
-    for file in dtor_dict['info']['files']:
-        size += file['length']
-    return size
-
 def main():
     if optimise_token_use:
         torrent_infos = []
         for scan in scan_torrent_files(torrentfolder):
-            with open(scan.path, 'rb') as f:
-                dtor_dict = bdecode(f.read())
-
             if use_regex_for_torid:
                 tor_id = tor_id_regex(scan.name)
-                tor_size = get_size_from_dtorrent(dtor_dict)
+
+                with open(scan.path, 'rb') as f:
+                    dtor_dict = bdecode(f.read())
+                tor_size = sum(f['length'] for f in dtor_dict['info']['files'])
             else:
-                hash = get_infohash_from_dtorrent(dtor_dict)
-                tor_info = ops.request('GET', 'torrent', hash=hash)['torrent']
+                tor_info = api_tor_info(scan.path)
                 tor_id = tor_info['id']
                 tor_size = tor_info['size']
 

@@ -19,7 +19,7 @@ class RequestFailure(Exception):
 
 # noinspection PyTypeChecker
 class GazelleApi:
-    def __init__(self, site_id=None, key=None, report=lambda *x: None):
+    def __init__(self, site_id=None, key=None):
         assert site_id in SITE_URLS, f"{site_id} is not a valid id"
         self.id = site_id
         self.session = requests.Session()
@@ -27,7 +27,6 @@ class GazelleApi:
         self.last_x_reqs = deque([0], maxlen=REQUEST_LIMITS[site_id])
         self.url = SITE_URLS[site_id]
         self._announce = None
-        self.report = report
 
     @property
     def announce(self):
@@ -42,12 +41,9 @@ class GazelleApi:
 
     def _rate_limit(self):
         if (t := time.time() - self.last_x_reqs[0]) <= 10:
-            self.report(f"sleeping {10-t}", 3)
             time.sleep(10 - t)
 
     def request(self, req_method, action, data=None, files=None, **kwargs):
-        self.report(f"{self.id} {action=}, {kwargs=}", 4)
-        self.report(f"{data=}", 5)
         ajaxpage = self.url + 'ajax.php'
         params = {'action': action}
         params.update(kwargs)
