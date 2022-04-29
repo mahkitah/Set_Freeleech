@@ -63,6 +63,7 @@ def main():
     if optimise_token_use:
         torrent_infos = []
         for scan in scan_torrent_files(torrentfolder):
+            print(scan.name)
             if use_regex_for_torid:
                 tor_id = tor_id_regex(scan.name)
 
@@ -76,6 +77,7 @@ def main():
 
             wpt, nr_tokens = waste_per_token(tor_size, token_size)
             if max_wpt and wpt > max_wpt:
+                print('skipped: wpt > max')
                 continue
             torrent_infos.append((scan, tor_id, nr_tokens, wpt))
 
@@ -84,6 +86,7 @@ def main():
         tokens_spent = 0
         for scan, tor_id, nr_tokens, _ in torrent_infos:
             if spend_max_tokens and tokens_spent + nr_tokens > spend_max_tokens:
+                print('skipped: would exceed max tokens spent')
                 continue
             made_freeleech = make_freeleech(tor_id)
             if made_freeleech:
@@ -92,10 +95,12 @@ def main():
                 if os.path.isdir(move_on_success_folder):
                     shutil.move(scan.path, move_on_success_folder)
                 if tokens_spent == spend_max_tokens:
+                    print('stopping: max tokens reached')
                     break
 
     else:
         for scan in scan_torrent_files(torrentfolder):
+            print(scan.name)
             if use_regex_for_torid:
                 tor_id = tor_id_regex(scan.name)
             else:
@@ -103,7 +108,7 @@ def main():
 
             made_freeleech = make_freeleech(tor_id)
             if made_freeleech:
-                print(f'made freeleech: {scan.name}')
+                print('made freeleech')
                 if os.path.isdir(move_on_success_folder):
                     shutil.move(scan.path, move_on_success_folder)
 
