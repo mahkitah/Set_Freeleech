@@ -1,7 +1,10 @@
 import os
 import re
 import shutil
+from math import ceil
 from hashlib import sha1
+from pathlib import Path
+from typing import Iterator
 
 from bcoding import bdecode, bencode
 from gazelle_api import GazelleApi, RequestFailure
@@ -9,48 +12,41 @@ from gazelle_api import GazelleApi, RequestFailure
 ##############################################
 # edit this:
 
-torrentfolder = "D:\\Test\\Torrents"
+torrentfolder = "D:\\Test\\Torrents\\fl_test"
 move_on_success_folder = "D:\\Test\\Made Freeleech"  # Must exist. Use empty quotes to not move on success
 api_key = "1234567890"
 use_regex_for_torid = r'.+-(\d+).torrent'  # Use empty quotes to not use regex
-token_size = 512 * 1024 ** 2
 
 optimise_token_use = True  # values below are only used when this is True, set to False to disable
 spend_max_tokens = 15  # 0 = no max
-max_wpt = 150 * 1024 ** 2  # max waste per token, 0 = no max
+max_wpt = 150  # max waste per token (in MB), 0 = no max
 
 ###############################################
 
 ops = GazelleApi('OPS', f'token {api_key}')
+token_size = 512 * 1024 ** 2
+max_wpt = max_wpt * 1024 ** 2
 
-def tor_id_regex(filename):
+
+def tor_id_regex(filename: str) -> int:
     match = re.match(use_regex_for_torid, filename)
     if match:
-        return match.group(1)
+        return int(match.group(1))
 
-def api_tor_info(path):
-    with open(path, 'rb') as f:
-        dtor_dict = bdecode(f.read())
-    hash = get_infohash_from_dtorrent(dtor_dict)
-    return ops.request('GET', 'torrent', hash=hash)['torrent']
 
-def get_infohash_from_dtorrent(dtor_dict):
-    info = dtor_dict['info']
-    return sha1(bencode(info)).hexdigest()
+def api_tor_info(dtor_dict) -> dict:
+    info_hash = sha1(bencode(dtor_dict['info'])).hexdigest()
+    return ops.request('GET', 'torrent', hash=info_hash)['torrent']
 
-def waste_per_token(torrent_size, token_size):
-    nr_tokens, mod = divmod(torrent_size, token_size)
-    if mod:
-        nr_tokens += 1
+
+def waste_per_token(torrent_size: int) -> tuple[int, int]:
+    nr_tokens = ceil(torrent_size / token_size)
     cost = nr_tokens * token_size
-    return (cost - torrent_size) / nr_tokens, nr_tokens
+    wpt = (cost - torrent_size) / nr_tokens
+    return wpt, nr_tokens
 
-def scan_torrent_files(path):
-    for scan in os.scandir(path):
-        if scan.is_file() and scan.name.endswith('.torrent'):
-            yield scan
 
-def make_freeleech(tor_id):
+def make_freeleech(tor_id) -> bool:
     try:
         r = ops.request('GET', 'download', id=tor_id, usetoken=True)
     except RequestFailure:
@@ -59,58 +55,72 @@ def make_freeleech(tor_id):
     if 'application/x-bittorrent' in r.headers['content-type']:
         return True
 
+
+def not_optimised(tor_folder: Path):
+    for tor_path in tor_folder.glob('*.torrent'):
+        print()
+        print(tor_path.name)
+        if use_regex_for_torid:
+            tor_id = tor_id_regex(tor_path.name)
+        else:
+            dtor_dict = bdecode(tor_path.read_bytes())
+            tor_id = api_tor_info(dtor_dict)['id']
+
+        made_freeleech = make_freeleech(tor_id)
+        if made_freeleech:
+            print('made freeleech')
+            if os.path.isdir(move_on_success_folder):
+                shutil.move(tor_path, move_on_success_folder)
+
+
+def infos_gen(tor_folder: Path) -> Iterator[tuple[Path, int, int, int]]:
+    if not use_regex_for_torid:
+        print('Getting torrent id\'s from api. This could take a while')
+    for tor_path in tor_folder.glob('*.torrent'):
+        dtor_dict: dict = bdecode(tor_path.read_bytes())
+        if use_regex_for_torid:
+            tor_id = tor_id_regex(tor_path.name)
+            tor_size = sum(f['length'] for f in dtor_dict['info']['files'])
+        else:
+            tor_info = api_tor_info(dtor_dict)
+            tor_id = tor_info['id']
+            tor_size = tor_info['size']
+            print(tor_id)
+
+        wpt, nr_tokens = waste_per_token(tor_size)
+        yield tor_path, tor_id, nr_tokens, wpt
+
+
+def optimised(tor_folder: Path):
+    tokens_spent = 0
+    for tor_path, tor_id, nr_tokens, wpt in sorted(infos_gen(tor_folder), key=lambda x: x[3]):
+        print()
+        print(tor_path.name)
+        if max_wpt and wpt > max_wpt:
+            print(f'skipped: wpt({round(wpt / 1024 ** 2, 2)}) > max')
+            continue
+        if spend_max_tokens and tokens_spent + nr_tokens > spend_max_tokens:
+            print(f'skipped: {nr_tokens} tokens would exceed max tokens spent')
+            continue
+
+        made_freeleech = make_freeleech(tor_id)
+        if made_freeleech:
+            print(f'made freeleech: {tor_path.name} ({nr_tokens} token{"s" if nr_tokens > 1 else ""})')
+            tokens_spent += nr_tokens
+            if os.path.isdir(move_on_success_folder):
+                shutil.move(tor_path, move_on_success_folder)
+            if tokens_spent == spend_max_tokens:
+                print('stopping: max tokens reached')
+                break
+
+
 def main():
+    tor_folder = Path(torrentfolder)
     if optimise_token_use:
-        torrent_infos = []
-        for scan in scan_torrent_files(torrentfolder):
-            print(scan.name)
-            if use_regex_for_torid:
-                tor_id = tor_id_regex(scan.name)
-
-                with open(scan.path, 'rb') as f:
-                    dtor_dict = bdecode(f.read())
-                tor_size = sum(f['length'] for f in dtor_dict['info']['files'])
-            else:
-                tor_info = api_tor_info(scan.path)
-                tor_id = tor_info['id']
-                tor_size = tor_info['size']
-
-            wpt, nr_tokens = waste_per_token(tor_size, token_size)
-            if max_wpt and wpt > max_wpt:
-                print('skipped: wpt > max')
-                continue
-            torrent_infos.append((scan, tor_id, nr_tokens, wpt))
-
-        torrent_infos.sort(key=lambda x: x[3])
-
-        tokens_spent = 0
-        for scan, tor_id, nr_tokens, _ in torrent_infos:
-            if spend_max_tokens and tokens_spent + nr_tokens > spend_max_tokens:
-                print('skipped: would exceed max tokens spent')
-                continue
-            made_freeleech = make_freeleech(tor_id)
-            if made_freeleech:
-                print(f'made freeleech: {scan.name} ({nr_tokens} token{"s" if nr_tokens > 1 else ""})')
-                tokens_spent += nr_tokens
-                if os.path.isdir(move_on_success_folder):
-                    shutil.move(scan.path, move_on_success_folder)
-                if tokens_spent == spend_max_tokens:
-                    print('stopping: max tokens reached')
-                    break
-
+        optimised(tor_folder)
     else:
-        for scan in scan_torrent_files(torrentfolder):
-            print(scan.name)
-            if use_regex_for_torid:
-                tor_id = tor_id_regex(scan.name)
-            else:
-                tor_id = api_tor_info(scan.path)['id']
+        not_optimised(tor_folder)
 
-            made_freeleech = make_freeleech(tor_id)
-            if made_freeleech:
-                print('made freeleech')
-                if os.path.isdir(move_on_success_folder):
-                    shutil.move(scan.path, move_on_success_folder)
 
 if __name__ == "__main__":
     main()
