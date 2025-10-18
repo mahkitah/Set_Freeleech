@@ -26,7 +26,7 @@ max_wpt = 250  # max waste per token (in MB), 0 = no max
 ###############################################
 
 ops = GazelleApi('OPS', f'token {api_key}')
-token_size = 512 * 1024 ** 2
+token_size = 320 * 1024 ** 2
 max_wpt = max_wpt * 1024 ** 2
 file_name_rex = re.compile(use_regex_for_torid)
 comment_rex = re.compile(r'torrentid=(\d+)')
