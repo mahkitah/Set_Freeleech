@@ -14,7 +14,6 @@ from gazelle_api import GazelleApi, RequestFailure
 
 torrentfolder = "D:\\Test\\Torrents\\fl_test"
 move_on_success_folder = "D:\\Test\\Made Freeleech"  # Will be created if it doesn't exist. Use empty quotes not to move on success
-# move_on_success_folder = "(*&%#$#"
 api_key = "1234567890"
 use_regex_for_torid = r'.+-(\d+).torrent'  # Use empty quotes to not use regex
 
