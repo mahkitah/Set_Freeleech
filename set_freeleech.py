@@ -89,7 +89,10 @@ def get_tor_info(tor_path: Path):
         return tor_id
 
     if not tor_size:
-        tor_size = sum(f['length'] for f in dtor_dict['info']['files'])
+        try:
+            tor_size = sum(f['length'] for f in dtor_dict['info']['files'])
+        except KeyError:
+            tor_size = dtor_dict['info']['length']
 
     wpt, nr_tokens = waste_per_token(tor_size)
     return tor_id, nr_tokens, wpt
